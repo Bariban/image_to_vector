@@ -1,0 +1,47 @@
+name: Deploy Python Service
+
+on:
+  push:
+    branches:
+      - master
+
+env:
+  IMAGE_NAME: "python-img-to-vector"
+  CONTAINER_NAME: "ppython-img-to-vector"
+
+jobs:
+  build_and_deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Python environment
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.x'
+
+      - name: Build Docker image
+        run: docker build -t $REGISTRY/$IMAGE_NAME:latest .
+
+      - name: Copy SSH key
+        uses: appleboy/ssh-action@v0.1.3
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSHKEY }}
+          envs: IMAGE_NAME, CONTAINER_NAME
+          script: |
+            # Остановка контейнера, если он уже запущен
+            docker stop $CONTAINER_NAME || true
+            docker rm $CONTAINER_NAME || true
+
+            # Запуск контейнера с новыми переменными окружения
+            docker run -d \
+              --restart always \
+              --name $CONTAINER_NAME \
+              -e PYTHON_ENV=production \
+              -e API_KEY=${{ secrets.API_KEY }} \
+              -p 8000:8000 \
+              $REGISTRY/$IMAGE_NAME:latest
